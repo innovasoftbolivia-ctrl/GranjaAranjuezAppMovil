@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>QR de Galpones — Granja AA</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 24px; color: #111; }
+  h1 { text-align: center; font-size: 22px; margin: 0 0 4px; }
+  p.sub { text-align: center; color: #666; margin: 0 0 24px; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 900px; margin: 0 auto; }
+  .card {
+    border: 2px solid #111; border-radius: 16px; padding: 20px;
+    display: flex; flex-direction: column; align-items: center;
+    page-break-inside: avoid;
+  }
+  .card img { width: 100%; max-width: 320px; height: auto; }
+  .card .nombre { font-size: 26px; font-weight: bold; margin-top: 12px; }
+  .card .hint { font-size: 12px; color: #777; margin-top: 4px; }
+  @media print { body { padding: 0; } .grid { gap: 12px; } }
+</style>
+</head>
+<body>
+  <h1>Códigos QR de Galpones · Granja AA</h1>
+  <p class="sub">Imprime, recorta y pega el QR correspondiente en cada galpón. El operario lo escanea al abrir la app.</p>
+  <div class="grid">
+    <div class="card"><img src="./galpon_1.png" alt="Galpón 1"><div class="nombre">Galpón 1</div><div class="hint">Escanea para registrar en este galpón</div></div>
+    <div class="card"><img src="./galpon_2.png" alt="Galpón 2"><div class="nombre">Galpón 2</div><div class="hint">Escanea para registrar en este galpón</div></div>
+    <div class="card"><img src="./galpon_3.png" alt="Galpón 3"><div class="nombre">Galpón 3</div><div class="hint">Escanea para registrar en este galpón</div></div>
+    <div class="card"><img src="./galpon_4.png" alt="Galpón 4"><div class="nombre">Galpón 4</div><div class="hint">Escanea para registrar en este galpón</div></div>
+  </div>
+</body>
+</html>

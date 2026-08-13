@@ -1,0 +1,20 @@
+# Archivos que EAS NO debe subir en el tarball del build.
+# (Cuando existe .easignore, EAS lo usa EN LUGAR de .gitignore, así que
+#  hay que listar también lo de siempre.)
+
+# Dependencias y build nativo (se regeneran en la nube)
+node_modules/
+.expo/
+/ios
+/android
+
+# Worktrees de Claude Code anidados: traen checkouts completos con binarios
+# pesados (ngrok.exe de 32MB c/u) que no tienen nada que ver con la app.
+.claude/
+
+# Varios
+*.log
+.DS_Store
+npm-debug.*
+yarn-error.*
+.vscode/

@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import api from '../config/api';
 import * as SecureStore from 'expo-secure-store';
+import { colors, radius } from '../theme';
 
-export default function LoginScreen({ onLoginSuccess }) {
+export default function LoginScreen({ onLoginSuccess, galpon }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -30,7 +31,7 @@ export default function LoginScreen({ onLoginSuccess }) {
             console.log('Intentando login en:', api.defaults.baseURL);
             
             const response = await api.post('/login', {
-                email: email,
+                email: email.trim(),
                 password: password,
                 device_name: Platform.OS + ' ' + Platform.Version
             });
@@ -51,12 +52,23 @@ export default function LoginScreen({ onLoginSuccess }) {
             let title = 'Error';
 
             if (error.response) {
-                // El servidor respondió (401, 404, 500, etc)
-                if (error.response.status === 401 || error.response.status === 404) {
+                const status = error.response.status;
+                // El backend (AuthController) responde 401/422 con credenciales
+                // incorrectas. (A1)
+                if (status === 401 || status === 422) {
                     title = 'Credenciales Inválidas';
                     message = 'Los datos ingresados no coinciden con nuestros registros. Verifica tu correo y contraseña.';
+                } else if (status === 404) {
+                    // 404 NO es credenciales: es que la app no encontró el
+                    // endpoint (URL de la API mal configurada o backend caído).
+                    title = 'Servicio no encontrado';
+                    message = 'La app no encontró el servicio de login (HTTP 404). Revisa que EXPO_PUBLIC_API_URL en .env apunte a un backend activo.';
+                } else if (status === 429) {
+                    // Rate limit del login (throttle:5,1 en el servidor). (A1)
+                    title = 'Demasiados intentos';
+                    message = 'Has superado el número de intentos permitidos. Espera un minuto e inténtalo de nuevo.';
                 } else {
-                    message = `Error ${error.response.status}: ${error.response.data?.message || 'Error interno del servidor'}`;
+                    message = `Error ${status}: ${error.response.data?.message || 'Error interno del servidor'}`;
                 }
             } else if (error.request) {
                 // Timeout o Red caída
@@ -88,13 +100,18 @@ export default function LoginScreen({ onLoginSuccess }) {
                     </View>
                     <Text style={styles.title}>Granja AA</Text>
                     <Text style={styles.subtitle}>GESTIÓN PRIVADA • ACCESO</Text>
+                    {galpon && (
+                        <View style={styles.galponBadge}>
+                            <Text style={styles.galponBadgeText}>📍 {galpon.nombre}</Text>
+                        </View>
+                    )}
                 </View>
 
                 <View style={styles.formContainer}>
                     <TextInput
                         style={styles.input}
                         placeholder="Correo Electrónico"
-                        placeholderTextColor="#555"
+                        placeholderTextColor={colors.textFaint}
                         keyboardType="email-address"
                         autoCapitalize="none"
                         value={email}
@@ -104,7 +121,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                     <TextInput
                         style={styles.input}
                         placeholder="Contraseña"
-                        placeholderTextColor="#555"
+                        placeholderTextColor={colors.textFaint}
                         secureTextEntry
                         value={password}
                         onChangeText={setPassword}
@@ -116,7 +133,7 @@ export default function LoginScreen({ onLoginSuccess }) {
                         disabled={loading}
                     >
                         {loading ? (
-                            <ActivityIndicator color="#000" />
+                            <ActivityIndicator color={colors.onGold} />
                         ) : (
                             <Text style={styles.buttonText}>Entrar al Sistema</Text>
                         )}
@@ -132,91 +149,97 @@ export default function LoginScreen({ onLoginSuccess }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000000',
+        backgroundColor: colors.bg,
     },
     inner: {
         flex: 1,
         justifyContent: 'center',
-        padding: 30,
+        padding: 28,
     },
     logoContainer: {
         alignItems: 'center',
-        marginBottom: 50,
+        marginBottom: 44,
     },
     logoCircle: {
-        width: 130,
-        height: 130,
-        borderRadius: 40,
-        backgroundColor: 'rgba(217, 179, 0, 0.05)',
+        width: 120,
+        height: 120,
+        borderRadius: radius.card,
+        backgroundColor: colors.goldSoft,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 20,
         borderWidth: 1,
-        borderColor: 'rgba(217, 179, 0, 0.2)',
+        borderColor: colors.goldBorder,
     },
     logoImage: {
-        width: 100,
-        height: 100,
-        borderRadius: 20,
+        width: 92,
+        height: 92,
+        borderRadius: radius.chip,
     },
     title: {
         fontSize: 36,
         fontWeight: 'bold',
-        color: '#ffffff',
+        color: colors.text,
         letterSpacing: -1,
     },
     subtitle: {
         fontSize: 12,
-        color: '#D9B300',
+        color: colors.gold,
         marginTop: 6,
         letterSpacing: 2,
         fontWeight: '700',
     },
-    formContainer: {
-        backgroundColor: '#050505',
-        padding: 30,
-        borderRadius: 35,
+    galponBadge: {
+        marginTop: 16,
+        backgroundColor: colors.goldSoft,
         borderWidth: 1,
-        borderColor: 'rgba(217, 179, 0, 0.12)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 20 },
-        shadowOpacity: 0.6,
-        shadowRadius: 30,
+        borderColor: colors.goldBorder,
+        paddingVertical: 8,
+        paddingHorizontal: 18,
+        borderRadius: radius.pill,
+    },
+    galponBadgeText: {
+        color: colors.gold,
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    formContainer: {
+        backgroundColor: colors.card,
+        padding: 24,
+        borderRadius: radius.card,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     input: {
-        height: 64,
-        backgroundColor: '#0c0c0c',
+        height: 56,
+        backgroundColor: colors.inputBg,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
-        borderRadius: 20,
-        marginBottom: 20,
+        borderColor: colors.border,
+        borderRadius: radius.control,
+        marginBottom: 16,
         fontSize: 16,
-        color: '#ffffff',
-        paddingHorizontal: 22,
+        color: colors.text,
+        paddingHorizontal: 16,
     },
     button: {
-        backgroundColor: '#D9B300',
-        height: 64,
-        borderRadius: 20,
+        backgroundColor: colors.gold,
+        height: 56,
+        borderRadius: radius.control,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 10,
-        shadowColor: '#D9B300',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
+        marginTop: 8,
     },
     buttonText: {
-        color: '#000000',
-        fontSize: 18,
-        fontWeight: 'bold',
+        color: colors.onGold,
+        fontSize: 17,
+        fontWeight: '700',
         textTransform: 'uppercase',
         letterSpacing: 1,
     },
     footer: {
         textAlign: 'center',
-        marginTop: 70,
-        color: '#222',
+        marginTop: 60,
+        color: colors.textFaint,
         fontSize: 10,
         fontWeight: '700',
         letterSpacing: 2,

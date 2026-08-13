@@ -1,13 +1,70 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Image, ActivityIndicator, Alert } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
+import { getQueue, syncOfflineData } from '../utils/SyncManager';
+import { colors, radius } from '../theme';
 
-export default function HomeScreen({ user, onNavigate, onLogout }) {
+export default function HomeScreen({ user, galpon, onNavigate, onLogout, onChangeGalpon }) {
+    const [isOffline, setIsOffline] = useState(false);
+    const [queueCount, setQueueCount] = useState(0);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    useEffect(() => {
+        const unsubscribe = NetInfo.addEventListener(state => {
+            setIsOffline(!state.isConnected);
+            if (state.isConnected) {
+                checkQueue();
+            }
+        });
+        
+        checkQueue();
+
+        return () => unsubscribe();
+    }, []);
+
+    const checkQueue = async () => {
+        const q = await getQueue();
+        setQueueCount(q.length);
+    };
+
+    const handleManualSync = async () => {
+        if (isOffline) {
+            Alert.alert('Error', 'No hay conexión a internet.');
+            return;
+        }
+        setIsSyncing(true);
+        const result = await syncOfflineData();
+        setIsSyncing(false);
+        if (result.busy) {
+            // Ya había una sincronización en curso; no mostramos nada.
+        } else if (result.rejected > 0) {
+            // El servidor rechazó datos (4xx no-duplicado): no se guardaron y no se
+            // reintentarán. Es importante NO decir "ya estaban registrados".
+            Alert.alert(
+                'Atención',
+                `${result.rejected} registro(s) fueron rechazados por el servidor y no se guardaron. Avisa al administrador.` +
+                (result.pending > 0 ? `\nQuedan ${result.pending} pendiente(s) por reintentar.` : '')
+            );
+        } else if (result.success) {
+            const procesados = result.synced + result.resolved;
+            if (procesados > 0) {
+                const detalle = result.resolved > 0
+                    ? `${result.synced} enviados, ${result.resolved} ya estaban registrados.`
+                    : `${result.synced} registros enviados.`;
+                Alert.alert('Éxito', `Sincronización completa. ${detalle}`);
+            }
+        } else {
+            Alert.alert('Atención', `Quedan ${result.pending} registro(s) pendientes. Reintenta cuando tengas mejor señal.`);
+        }
+        checkQueue();
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <View style={styles.headerTop}>
                     <View>
-                        <Text style={styles.welcome}>¡Hola, {user?.name.split(' ')[0]}!</Text>
+                        <Text style={styles.welcome}>¡Hola, {user?.name?.split(' ')[0] ?? 'Usuario'}!</Text>
                         <Text style={styles.subtitle}>Granja AA • Gestión Privada</Text>
                     </View>
                     <Image 
@@ -18,11 +75,35 @@ export default function HomeScreen({ user, onNavigate, onLogout }) {
                 </View>
             </View>
 
+            <View style={styles.galponBanner}>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.galponBannerLabel}>GALPÓN ACTIVO</Text>
+                    <Text style={styles.galponBannerName}>📍 {galpon?.nombre ?? 'Sin galpón'}</Text>
+                </View>
+                <TouchableOpacity style={styles.galponChangeBtn} onPress={onChangeGalpon}>
+                    <Text style={styles.galponChangeText}>Cambiar</Text>
+                </TouchableOpacity>
+            </View>
+
+            {isOffline && (
+                <View style={styles.offlineBanner}>
+                    <Text style={styles.offlineText}>⚠️ Sin conexión. Modo offline activo.</Text>
+                </View>
+            )}
+
+            {!isOffline && queueCount > 0 && (
+                <View style={styles.syncBannerContainer}>
+                    <Text style={styles.syncBannerText}>Tienes {queueCount} pendientes</Text>
+                    <TouchableOpacity style={styles.syncBtn} onPress={handleManualSync} disabled={isSyncing}>
+                        {isSyncing ? <ActivityIndicator color="#000" size="small" /> : <Text style={styles.syncBtnText}>Sincronizar</Text>}
+                    </TouchableOpacity>
+                </View>
+            )}
+
             <ScrollView contentContainerStyle={styles.menuArea}>
                 <TouchableOpacity style={styles.menuCard} onPress={() => onNavigate('produccion')}>
-                    <View style={[styles.glowBackground, { backgroundColor: 'rgba(217, 179, 0, 0.12)' }]} />
                     <View style={styles.cardHeader}>
-                        <View style={[styles.iconContainer, { backgroundColor: 'rgba(217, 179, 0, 0.15)', borderColor: 'rgba(217, 179, 0, 0.3)' }]}>
+                        <View style={[styles.iconContainer, { backgroundColor: colors.goldSoft }]}>
                             <Text style={styles.icon}>🥚</Text>
                         </View>
                         <View style={styles.textContainer}>
@@ -33,9 +114,8 @@ export default function HomeScreen({ user, onNavigate, onLogout }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuCard} onPress={() => onNavigate('mortalidad')}>
-                    <View style={[styles.glowBackground, { backgroundColor: 'rgba(255, 255, 255, 0.03)' }]} />
                     <View style={styles.cardHeader}>
-                        <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.05)', borderColor: 'rgba(255, 255, 255, 0.1)' }]}>
+                        <View style={[styles.iconContainer, { backgroundColor: colors.dangerSoft }]}>
                             <Text style={styles.icon}>💀</Text>
                         </View>
                         <View style={styles.textContainer}>
@@ -46,9 +126,8 @@ export default function HomeScreen({ user, onNavigate, onLogout }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuCard} onPress={() => onNavigate('historial')}>
-                    <View style={[styles.glowBackground, { backgroundColor: 'rgba(217, 179, 0, 0.05)' }]} />
                     <View style={styles.cardHeader}>
-                        <View style={[styles.iconContainer, { backgroundColor: 'rgba(217, 179, 0, 0.08)', borderColor: 'rgba(217, 179, 0, 0.15)' }]}>
+                        <View style={[styles.iconContainer, { backgroundColor: colors.goldSoft }]}>
                             <Text style={styles.icon}>📋</Text>
                         </View>
                         <View style={styles.textContainer}>
@@ -59,7 +138,7 @@ export default function HomeScreen({ user, onNavigate, onLogout }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-                    <Text style={styles.logoutText}>Finalizar Sesión Activa</Text>
+                    <Text style={styles.logoutText}>Cerrar sesión (requiere inspección)</Text>
                 </TouchableOpacity>
                 
                 <View style={styles.footer}>
@@ -73,17 +152,51 @@ export default function HomeScreen({ user, onNavigate, onLogout }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000000',
+        backgroundColor: colors.bg,
     },
     header: {
         paddingTop: 60,
-        paddingHorizontal: 30,
-        paddingBottom: 40,
-        backgroundColor: '#050505',
-        borderBottomLeftRadius: 40,
-        borderBottomRightRadius: 40,
+        paddingHorizontal: 28,
+        paddingBottom: 28,
+        backgroundColor: colors.panel,
         borderBottomWidth: 1,
-        borderColor: 'rgba(217, 179, 0, 0.15)',
+        borderColor: colors.border,
+    },
+    galponBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.card,
+        marginHorizontal: 20,
+        marginTop: 20,
+        padding: 16,
+        borderRadius: radius.card,
+        borderWidth: 1,
+        borderColor: colors.goldBorder,
+    },
+    galponBannerLabel: {
+        fontSize: 10,
+        color: colors.gold,
+        fontWeight: 'bold',
+        letterSpacing: 1,
+    },
+    galponBannerName: {
+        fontSize: 18,
+        color: colors.text,
+        fontWeight: 'bold',
+        marginTop: 2,
+    },
+    galponChangeBtn: {
+        backgroundColor: colors.goldSoft,
+        borderWidth: 1,
+        borderColor: colors.goldBorder,
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: radius.control,
+    },
+    galponChangeText: {
+        color: colors.gold,
+        fontWeight: 'bold',
+        fontSize: 13,
     },
     headerTop: {
         flexDirection: 'row',
@@ -93,12 +206,12 @@ const styles = StyleSheet.create({
     welcome: {
         fontSize: 28,
         fontWeight: 'bold',
-        color: '#ffffff',
+        color: colors.text,
         letterSpacing: -1,
     },
     subtitle: {
         fontSize: 14,
-        color: '#D9B300',
+        color: colors.gold,
         marginTop: 4,
         fontWeight: '600',
         textTransform: 'uppercase',
@@ -107,76 +220,64 @@ const styles = StyleSheet.create({
     logoHeader: {
         width: 60,
         height: 60,
-        borderRadius: 15,
-        backgroundColor: 'rgba(217, 179, 0, 0.05)',
+        borderRadius: radius.chip,
+        backgroundColor: colors.goldSoft,
         borderWidth: 1,
-        borderColor: 'rgba(217, 179, 0, 0.1)',
+        borderColor: colors.border,
     },
     menuArea: {
-        padding: 25,
-        paddingTop: 35,
+        padding: 20,
+        paddingTop: 28,
     },
     menuCard: {
-        borderRadius: 28,
-        padding: 22,
-        marginBottom: 20,
-        backgroundColor: '#0a0a0a',
+        borderRadius: radius.card,
+        padding: 18,
+        marginBottom: 16,
+        backgroundColor: colors.card,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
-        position: 'relative',
-        overflow: 'hidden',
-    },
-    glowBackground: {
-        position: 'absolute',
-        top: -50,
-        left: -50,
-        width: 150,
-        height: 150,
-        borderRadius: 75,
+        borderColor: colors.border,
     },
     cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     iconContainer: {
-        width: 64,
-        height: 64,
-        borderRadius: 20,
+        width: 56,
+        height: 56,
+        borderRadius: radius.chip,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 18,
-        borderWidth: 1,
+        marginRight: 16,
     },
     icon: {
-        fontSize: 30,
+        fontSize: 28,
     },
     textContainer: {
         flex: 1,
     },
     menuTitle: {
-        fontSize: 20,
+        fontSize: 19,
         fontWeight: 'bold',
-        color: '#ffffff',
+        color: colors.text,
         marginBottom: 2,
     },
     menuDesc: {
         fontSize: 13,
-        color: '#8e8f9e',
+        color: colors.textMuted,
     },
     logoutButton: {
-        marginTop: 30,
-        padding: 20,
+        marginTop: 24,
+        padding: 18,
         alignItems: 'center',
-        backgroundColor: '#0a0a0a',
-        borderRadius: 22,
+        backgroundColor: colors.card,
+        borderRadius: radius.card,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderColor: colors.border,
     },
     logoutText: {
-        color: '#ffffff',
+        color: colors.textMuted,
         fontWeight: '700',
-        fontSize: 16,
-        opacity: 0.6,
+        fontSize: 15,
     },
     footer: {
         marginTop: 40,
@@ -184,9 +285,44 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     footerText: {
-        color: '#333',
+        color: colors.textFaint,
         fontSize: 10,
         fontWeight: '700',
         letterSpacing: 2,
+    },
+    offlineBanner: {
+        backgroundColor: colors.gold,
+        padding: 10,
+        alignItems: 'center',
+    },
+    offlineText: {
+        color: colors.onGold,
+        fontWeight: 'bold',
+        fontSize: 12,
+    },
+    syncBannerContainer: {
+        backgroundColor: colors.card,
+        padding: 15,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottomWidth: 1,
+        borderColor: colors.border,
+    },
+    syncBannerText: {
+        color: colors.text,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    syncBtn: {
+        backgroundColor: colors.gold,
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+        borderRadius: radius.control,
+    },
+    syncBtnText: {
+        color: colors.onGold,
+        fontWeight: 'bold',
+        fontSize: 12,
     }
 });

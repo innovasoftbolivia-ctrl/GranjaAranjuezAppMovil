@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     StyleSheet, 
     Text, 
@@ -14,9 +14,11 @@ import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../config/api';
 import NetInfo from '@react-native-community/netinfo';
-import { addToQueue, syncOfflineData } from '../utils/SyncManager';
+import { addToQueue, syncOfflineData, isNetworkError } from '../utils/SyncManager';
+import { getCatalogos } from '../utils/catalogos';
+import { colors, radius } from '../theme';
 
-export default function MortalidadScreen({ onBack }) {
+export default function MortalidadScreen({ onBack, galpon }) {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     
@@ -25,14 +27,16 @@ export default function MortalidadScreen({ onBack }) {
     const [encargados, setEncargados] = useState([]);
     const [tiposMortalidad, setTiposMortalidad] = useState([]);
 
-    // Form State
-    const [idGalpon, setIdGalpon] = useState('');
+    // Form State — el galpón queda FIJADO al que se escaneó (no se elige).
+    const [idGalpon] = useState(galpon.id_galpon.toString());
     const [idEncargado, setIdEncargado] = useState('');
     const [fecha, setFecha] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [cantidades, setCantidades] = useState({});
 
     const [isOffline, setIsOffline] = useState(false);
+    // Guard síncrono anti-doble-submit (disabled={submitting} no basta: setSubmitting es async).
+    const submittingRef = useRef(false);
 
     useEffect(() => {
         fetchCatalogos();
@@ -50,13 +54,12 @@ export default function MortalidadScreen({ onBack }) {
 
     const fetchCatalogos = async () => {
         try {
-            const response = await api.get('/catalogos'); // El endpoint de mortalidad también tiene catalogos
-            setGalpones(response.data.galpones);
-            setEncargados(response.data.encargados);
-            setTiposMortalidad(response.data.tipos_mortalidad);
-            
-            if (response.data.galpones.length > 0) setIdGalpon(response.data.galpones[0].id_galpon.toString());
-            if (response.data.encargados.length > 0) setIdEncargado(response.data.encargados[0].id_encargado.toString());
+            const data = await getCatalogos();
+            setGalpones(data.galpones);
+            setEncargados(data.encargados);
+            setTiposMortalidad(data.tipos_mortalidad);
+
+            if (data.encargados.length > 0) setIdEncargado(data.encargados[0].id_encargado.toString());
         } catch (error) {
             Alert.alert('Error', 'No se pudieron cargar los datos base.');
         } finally {
@@ -69,6 +72,22 @@ export default function MortalidadScreen({ onBack }) {
             ...prev,
             [idTipo]: value
         }));
+    };
+
+    const handleDecrement = (idTipo) => {
+        const idStr = idTipo.toString();
+        const currentVal = parseInt(cantidades[idStr]) || 0;
+        if (currentVal > 1) {
+            handleCantidadChange(idTipo, (currentVal - 1).toString());
+        } else {
+            handleCantidadChange(idTipo, '');
+        }
+    };
+
+    const handleIncrement = (idTipo) => {
+        const idStr = idTipo.toString();
+        const currentVal = parseInt(cantidades[idStr]) || 0;
+        handleCantidadChange(idTipo, (currentVal + 1).toString());
     };
 
     const onDateChange = (event, selectedDate) => {
@@ -84,12 +103,20 @@ export default function MortalidadScreen({ onBack }) {
             return;
         }
 
+        const selectedGalpon = galpones.find(g => g.id_galpon.toString() === idGalpon);
+        if (selectedGalpon && !selectedGalpon.lote_activo) {
+            Alert.alert('Error', 'Este galpón no tiene un lote activo asignado.');
+            return;
+        }
+
         const validCantidades = Object.keys(cantidades).filter(key => parseInt(cantidades[key]) > 0);
         if (validCantidades.length === 0) {
             Alert.alert('Error', 'Ingresa al menos una baja por mortalidad');
             return;
         }
 
+        if (submittingRef.current) return; // ya hay un envío en curso
+        submittingRef.current = true;
         setSubmitting(true);
         try {
             const localDate = fecha.getFullYear() + '-' + 
@@ -105,9 +132,9 @@ export default function MortalidadScreen({ onBack }) {
 
             const response = await api.post('/mortalidad', payload);
             Alert.alert('Éxito', response.data.message);
-            onBack(); 
+            onBack();
         } catch (error) {
-            if (!error.response || error.code === 'ERR_NETWORK') {
+            if (isOffline || isNetworkError(error)) {
                 const localDate = fecha.getFullYear() + '-' + 
                                    String(fecha.getMonth() + 1).padStart(2, '0') + '-' + 
                                    String(fecha.getDate()).padStart(2, '0');
@@ -133,13 +160,17 @@ export default function MortalidadScreen({ onBack }) {
             }
         } finally {
             setSubmitting(false);
+            submittingRef.current = false;
         }
     };
+
+    // Datos del galpón escaneado (para mostrar su lote activo).
+    const galponActual = galpones.find(g => g.id_galpon.toString() === idGalpon);
 
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#009ef7" />
+                <ActivityIndicator size="large" color={colors.gold} />
                 <Text style={styles.loadingText}>Cargando datos...</Text>
             </View>
         );
@@ -155,18 +186,16 @@ export default function MortalidadScreen({ onBack }) {
             </View>
 
             <View style={styles.formCard}>
-                <Text style={styles.label}>Galpón / Ubicación</Text>
-                <View style={styles.pickerContainer}>
-                    <Picker
-                        style={{ color: '#fff' }}
-                        dropdownIconColor="#fff"
-                        selectedValue={idGalpon}
-                        onValueChange={(itemValue) => setIdGalpon(itemValue)}
-                    >
-                        {galpones?.map(g => (
-                            <Picker.Item key={g.id_galpon} label={`${g.nombre} (${g.ubicacion})`} value={g.id_galpon.toString()} />
-                        ))}
-                    </Picker>
+                <Text style={styles.label}>Galpón (escaneado)</Text>
+                <View style={styles.galponFijo}>
+                    <Text style={styles.galponNombre}>📍 {galpon.nombre}</Text>
+                    <Text style={styles.galponLote}>
+                        {galponActual
+                            ? (galponActual.lote_activo
+                                ? `Lote activo: ${galponActual.lote_activo}`
+                                : 'Sin lote activo asignado')
+                            : 'Galpón no encontrado en el catálogo'}
+                    </Text>
                 </View>
 
                 <Text style={styles.label}>Fecha</Text>
@@ -204,20 +233,39 @@ export default function MortalidadScreen({ onBack }) {
 
             <View style={styles.cantidadesSection}>
                 <Text style={styles.sectionTitle}>Bajas por Causa</Text>
-                {tiposMortalidad?.map(tipo => (
-                    <View key={tipo.id_tipo_mortalidad} style={styles.cantidadRow}>
-                        <View style={styles.tipoInfo}>
-                            <Text style={styles.tipoNombre}>{tipo.nombre}</Text>
+                {tiposMortalidad?.map(tipo => {
+                    const tipoIdStr = tipo.id_tipo_mortalidad.toString();
+                    return (
+                        <View key={tipo.id_tipo_mortalidad} style={styles.cantidadRow}>
+                            <View style={styles.tipoInfo}>
+                                <Text style={styles.tipoNombre}>{tipo.nombre}</Text>
+                            </View>
+                            <View style={styles.stepperContainer}>
+                                <TouchableOpacity 
+                                    style={styles.stepperButton} 
+                                    onPress={() => handleDecrement(tipo.id_tipo_mortalidad)}
+                                >
+                                    <Text style={styles.stepperButtonText}>-</Text>
+                                </TouchableOpacity>
+                                
+                                <TextInput
+                                    style={styles.cantidadInput}
+                                    placeholder="0"
+                                    keyboardType="numeric"
+                                    value={cantidades[tipoIdStr] || ''}
+                                    onChangeText={(val) => handleCantidadChange(tipo.id_tipo_mortalidad, val)}
+                                />
+                                
+                                <TouchableOpacity 
+                                    style={styles.stepperButton} 
+                                    onPress={() => handleIncrement(tipo.id_tipo_mortalidad)}
+                                >
+                                    <Text style={styles.stepperButtonText}>+</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                        <TextInput
-                            style={styles.cantidadInput}
-                            placeholder="0"
-                            keyboardType="numeric"
-                            value={cantidades[tipo.id_tipo_mortalidad.toString()] || ''}
-                            onChangeText={(val) => handleCantidadChange(tipo.id_tipo_mortalidad, val)}
-                        />
-                    </View>
-                ))}
+                    );
+                })}
             </View>
 
             <TouchableOpacity 
@@ -226,7 +274,7 @@ export default function MortalidadScreen({ onBack }) {
                 disabled={submitting}
             >
                 {submitting ? (
-                    <ActivityIndicator color="#fff" />
+                    <ActivityIndicator color={colors.onGold} />
                 ) : (
                     <Text style={styles.saveButtonText}>Guardar Mortalidad</Text>
                 )}
@@ -240,76 +288,85 @@ export default function MortalidadScreen({ onBack }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0f0f15',
+        backgroundColor: colors.bg,
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#0f0f15',
+        backgroundColor: colors.bg,
     },
     loadingText: {
         marginTop: 10,
-        color: '#8e8f9e',
+        color: colors.textMuted,
     },
     header: {
         paddingTop: 60,
         paddingHorizontal: 25,
-        paddingBottom: 25,
-        backgroundColor: '#13131a',
-        borderBottomLeftRadius: 30,
-        borderBottomRightRadius: 30,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
+        paddingBottom: 22,
+        backgroundColor: colors.panel,
         borderBottomWidth: 1,
-        borderColor: 'rgba(255,255,255,0.02)'
+        borderColor: colors.border,
     },
     backButton: {
         marginBottom: 10,
     },
     backText: {
-        color: '#009ef7',
+        color: colors.gold,
         fontWeight: 'bold',
     },
     title: {
         fontSize: 26,
         fontWeight: 'bold',
-        color: '#ffffff',
+        color: colors.text,
         letterSpacing: -0.5,
     },
     formCard: {
         margin: 20,
-        backgroundColor: '#181822',
-        padding: 24,
-        borderRadius: 24,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
+        backgroundColor: colors.card,
+        padding: 22,
+        borderRadius: radius.card,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     label: {
-        fontSize: 14,
-        color: '#8e8f9e',
+        fontSize: 13,
+        color: colors.textMuted,
         marginBottom: 8,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     pickerContainer: {
-        backgroundColor: '#121219',
-        borderRadius: 16,
+        backgroundColor: colors.inputBg,
+        borderRadius: radius.control,
         marginBottom: 20,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: colors.border,
+    },
+    galponFijo: {
+        backgroundColor: colors.inputBg,
+        borderRadius: radius.control,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: colors.goldBorder,
+        padding: 16,
+    },
+    galponNombre: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: colors.text,
+    },
+    galponLote: {
+        fontSize: 13,
+        color: colors.gold,
+        marginTop: 4,
+        fontWeight: '600',
     },
     dateSelector: {
-        backgroundColor: '#121219',
-        padding: 18,
-        borderRadius: 16,
+        backgroundColor: colors.inputBg,
+        padding: 16,
+        borderRadius: radius.control,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: colors.border,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -317,36 +374,33 @@ const styles = StyleSheet.create({
     },
     dateText: {
         fontSize: 16,
-        color: '#ffffff',
+        color: colors.text,
         fontWeight: 'bold',
     },
     dateHint: {
         fontSize: 12,
-        color: '#009ef7',
+        color: colors.gold,
     },
     cantidadesSection: {
         marginHorizontal: 20,
         marginBottom: 20,
     },
     sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#ffffff',
-        marginBottom: 15,
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.text,
+        marginBottom: 14,
         marginLeft: 4,
     },
     cantidadRow: {
-        backgroundColor: '#181822',
-        padding: 18,
-        borderRadius: 20,
+        backgroundColor: colors.card,
+        padding: 16,
+        borderRadius: radius.card,
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 12,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     tipoInfo: {
         flex: 1,
@@ -354,39 +408,54 @@ const styles = StyleSheet.create({
     tipoNombre: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#ffffff',
+        color: colors.text,
+    },
+    stepperContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    stepperButton: {
+        width: 44,
+        height: 44,
+        backgroundColor: colors.inputBg,
+        borderRadius: radius.control,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.goldBorder,
+        marginHorizontal: 4,
+    },
+    stepperButtonText: {
+        color: colors.gold,
+        fontSize: 20,
+        fontWeight: 'bold',
     },
     cantidadInput: {
-        width: 80,
-        height: 50,
-        backgroundColor: '#121219',
-        borderRadius: 14,
+        width: 60,
+        height: 44,
+        backgroundColor: colors.inputBg,
+        borderRadius: radius.control,
         textAlign: 'center',
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#f1416c',
+        color: colors.danger,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
+        borderColor: colors.border,
     },
     saveButton: {
         marginHorizontal: 20,
-        backgroundColor: '#009ef7',
+        backgroundColor: colors.gold,
         padding: 18,
-        borderRadius: 16,
+        borderRadius: radius.control,
         alignItems: 'center',
-        elevation: 8,
-        shadowColor: '#009ef7',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
     },
     saveButtonDisabled: {
-        backgroundColor: '#0095e8',
-        opacity: 0.5,
+        backgroundColor: '#666',
+        opacity: 0.6,
     },
     saveButtonText: {
-        color: '#ffffff',
-        fontSize: 18,
-        fontWeight: '600',
+        color: colors.onGold,
+        fontSize: 16,
+        fontWeight: '700',
     }
 });

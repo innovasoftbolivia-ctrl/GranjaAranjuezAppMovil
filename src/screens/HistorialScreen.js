@@ -4,6 +4,7 @@ import {
     TouchableOpacity, SafeAreaView, RefreshControl 
 } from 'react-native';
 import api from '../config/api';
+import { colors, radius } from '../theme';
 
 export default function HistorialScreen({ onBack, user }) {
     const [loading, setLoading] = useState(true);
@@ -36,7 +37,7 @@ export default function HistorialScreen({ onBack, user }) {
 
     const renderItem = ({ item }) => (
         <View style={styles.card}>
-            <View style={[styles.iconContainer, { backgroundColor: item.tipo === 'produccion' ? 'rgba(255, 199, 0, 0.1)' : 'rgba(241, 65, 108, 0.1)' }]}>
+            <View style={[styles.iconContainer, { backgroundColor: item.tipo === 'produccion' ? colors.goldSoft : colors.dangerSoft }]}>
                 <Text style={styles.cardIcon}>{item.tipo === 'produccion' ? '🥚' : '💀'}</Text>
             </View>
             <View style={styles.cardContent}>
@@ -47,7 +48,7 @@ export default function HistorialScreen({ onBack, user }) {
                     <Text style={styles.cardDate}>{item.fecha}</Text>
                 </View>
                 <Text style={styles.cardGalpon}>Galpón: {item.galpon}</Text>
-                <Text style={[styles.cardResumen, { color: item.tipo === 'produccion' ? '#ffc700' : '#f1416c' }]}>
+                <Text style={[styles.cardResumen, { color: item.tipo === 'produccion' ? colors.gold : colors.danger }]}>
                     {item.resumen}
                 </Text>
                 {user.role === 'admin' && (
@@ -68,7 +69,7 @@ export default function HistorialScreen({ onBack, user }) {
 
             {loading && !refreshing ? (
                 <View style={styles.center}>
-                    <ActivityIndicator size="large" color="#009ef7" />
+                    <ActivityIndicator size="large" color={colors.gold} />
                     <Text style={styles.loadingText}>Cargando actividad reciente...</Text>
                 </View>
             ) : error ? (
@@ -82,14 +83,18 @@ export default function HistorialScreen({ onBack, user }) {
                 <FlatList
                     data={data}
                     renderItem={renderItem}
-                    keyExtractor={item => item.id}
+                    keyExtractor={item => `${item.tipo}-${item.id}`}
                     contentContainerStyle={styles.list}
                     refreshControl={
                         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyText}>No hay registros en los últimos 15 días.</Text>
+                            <Text style={styles.emptyText}>
+                                {user?.role === 'admin' 
+                                    ? 'No hay registros de actividad en los últimos 15 días.' 
+                                    : 'No hay registros en los últimos 15 días.'}
+                            </Text>
                         </View>
                     }
                 />
@@ -101,65 +106,55 @@ export default function HistorialScreen({ onBack, user }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0f0f15',
+        backgroundColor: colors.bg,
     },
     header: {
         paddingTop: 50,
         paddingHorizontal: 25,
-        paddingBottom: 25,
-        backgroundColor: '#13131a',
+        paddingBottom: 22,
+        backgroundColor: colors.panel,
         flexDirection: 'row',
         alignItems: 'center',
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
         borderBottomWidth: 1,
-        borderColor: 'rgba(255,255,255,0.02)',
+        borderColor: colors.border,
     },
     backButton: {
         marginRight: 15,
     },
     backText: {
-        color: '#009ef7',
+        color: colors.gold,
         fontWeight: 'bold',
         fontSize: 16,
     },
     title: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#ffffff',
+        color: colors.text,
         letterSpacing: -0.5,
     },
     list: {
         padding: 20,
     },
     card: {
-        backgroundColor: '#181822',
-        borderRadius: 20,
-        padding: 18,
-        marginBottom: 16,
+        backgroundColor: colors.card,
+        borderRadius: radius.card,
+        padding: 16,
+        marginBottom: 14,
         flexDirection: 'row',
         alignItems: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.25,
-        shadowRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     iconContainer: {
-        width: 55,
-        height: 55,
-        borderRadius: 18,
+        width: 52,
+        height: 52,
+        borderRadius: radius.chip,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 18,
+        marginRight: 16,
     },
     cardIcon: {
-        fontSize: 26,
+        fontSize: 24,
     },
     cardContent: {
         flex: 1,
@@ -173,16 +168,16 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 17,
         fontWeight: 'bold',
-        color: '#ffffff',
+        color: colors.text,
         flex: 1,
     },
     cardDate: {
         fontSize: 13,
-        color: '#8e8f9e',
+        color: colors.textMuted,
     },
     cardGalpon: {
         fontSize: 14,
-        color: '#8e8f9e',
+        color: colors.textMuted,
     },
     cardResumen: {
         fontSize: 16,
@@ -191,7 +186,7 @@ const styles = StyleSheet.create({
     },
     cardEncargado: {
         fontSize: 13,
-        color: '#8e8f9e',
+        color: colors.textMuted,
         marginTop: 6,
         fontStyle: 'italic',
     },
@@ -203,10 +198,10 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         marginTop: 10,
-        color: '#8e8f9e',
+        color: colors.textMuted,
     },
     errorText: {
-        color: '#f1416c',
+        color: colors.danger,
         fontSize: 16,
         textAlign: 'center',
     },
@@ -214,12 +209,11 @@ const styles = StyleSheet.create({
         marginTop: 20,
         paddingVertical: 12,
         paddingHorizontal: 24,
-        backgroundColor: '#009ef7',
-        borderRadius: 12,
-        elevation: 4,
+        backgroundColor: colors.gold,
+        borderRadius: radius.control,
     },
     retryText: {
-        color: '#ffffff',
+        color: colors.onGold,
         fontWeight: 'bold',
         fontSize: 16,
     },
@@ -228,7 +222,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     emptyText: {
-        color: '#8e8f9e',
+        color: colors.textMuted,
         textAlign: 'center',
     }
 });
