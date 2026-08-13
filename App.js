@@ -7,7 +7,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import ProduccionScreen from './src/screens/ProduccionScreen';
 import MortalidadScreen from './src/screens/MortalidadScreen';
 import HistorialScreen from './src/screens/HistorialScreen';
-import { setAuthToken } from './src/config/api';
+import api, { setAuthToken, setOnUnauthorized } from './src/config/api';
 
 export default function App() {
   const [token, setToken] = useState(null);
@@ -44,6 +44,16 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    // Revocar el token en el servidor; si no hay conexión, igual se cierra la sesión local
+    try {
+      await api.post('logout');
+    } catch (e) {
+      console.warn('No se pudo revocar el token en el servidor:', e.message);
+    }
+    await clearLocalSession();
+  };
+
+  const clearLocalSession = async () => {
     try {
       await SecureStore.deleteItemAsync('userToken');
       await SecureStore.deleteItemAsync('userData');
@@ -54,6 +64,11 @@ export default function App() {
       console.error('Error en logout seguro:', e);
     }
   };
+
+  // Si el servidor responde 401 (token expirado o revocado), volver al login
+  useEffect(() => {
+    setOnUnauthorized(clearLocalSession);
+  }, []);
 
   const renderScreen = () => {
     if (isInitializing) {
