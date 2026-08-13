@@ -5,16 +5,22 @@ import axios from 'axios';
 // =====================================================================
 
 // URL base de la API del backend.
-//  - Desarrollo (celular en la misma wifi): usa la IP local de tu PC.
-//  - Producción (nube): reemplaza por la URL pública del backend, p. ej.
-//    'https://api.tudominio.com/api/'
-export const API_URL = 'http://192.168.1.16:8000/api/';
+// Se puede sobreescribir sin tocar código con la variable EXPO_PUBLIC_API_URL
+// (archivo .env de Expo). Si no está definida, se usa el túnel ngrok:
+// en la PC debe estar corriendo:
+//   ngrok http --domain=obedient-poplar-posted.ngrok-free.dev 8000
+// Cuando exista el dominio propio, basta con definir EXPO_PUBLIC_API_URL
+// (p. ej. 'https://granja.innovasoftbo.com/api/') y recompilar.
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://obedient-poplar-posted.ngrok-free.dev/api/';
 
 const api = axios.create({
     baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        // Evita la página de advertencia de ngrok en el plan gratuito;
+        // es inofensivo cuando se use un dominio propio.
+        'ngrok-skip-browser-warning': 'true',
     },
 });
 
