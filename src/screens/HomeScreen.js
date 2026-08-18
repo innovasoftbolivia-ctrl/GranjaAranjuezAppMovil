@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Image, ActivityIndicator, Alert } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { getQueue, syncOfflineData } from '../utils/SyncManager';
+import api from '../config/api';
 import { colors, radius } from '../theme';
 
 export default function HomeScreen({ user, galpon, onNavigate, onLogout, onChangeGalpon }) {
     const [isOffline, setIsOffline] = useState(false);
     const [queueCount, setQueueCount] = useState(0);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [avisos, setAvisos] = useState([]);
 
     useEffect(() => {
         const unsubscribe = NetInfo.addEventListener(state => {
@@ -18,9 +20,28 @@ export default function HomeScreen({ user, galpon, onNavigate, onLogout, onChang
         });
         
         checkQueue();
+        cargarAvisos();
 
         return () => unsubscribe();
-    }, []);
+    }, [galpon?.id_galpon]);
+
+    /*
+     * Avisos del galpon en el que esta parado el encargado.
+     *
+     * Fallan en silencio a proposito: son informacion de apoyo, no parte del
+     * registro. Sin senal en el galpon -que es lo normal- la pantalla debe seguir
+     * sirviendo para anotar produccion y mortalidad, que es a lo que se vino.
+     */
+    const cargarAvisos = async () => {
+        if (!galpon?.id_galpon) return;
+
+        try {
+            const { data } = await api.get('alertas', { params: { id_galpon: galpon.id_galpon } });
+            setAvisos(data.alertas ?? []);
+        } catch (e) {
+            setAvisos([]);
+        }
+    };
 
     const checkQueue = async () => {
         const q = await getQueue();
@@ -84,6 +105,20 @@ export default function HomeScreen({ user, galpon, onNavigate, onLogout, onChang
                     <Text style={styles.galponChangeText}>Cambiar</Text>
                 </TouchableOpacity>
             </View>
+
+            {avisos.map((aviso, i) => (
+                <View
+                    key={i}
+                    style={[
+                        styles.avisoBanner,
+                        aviso.gravedad === 'critica' && styles.avisoCritico,
+                        aviso.gravedad === 'info' && styles.avisoInfo,
+                    ]}
+                >
+                    <Text style={styles.avisoTitulo}>{aviso.titulo}</Text>
+                    <Text style={styles.avisoMensaje}>{aviso.mensaje}</Text>
+                </View>
+            ))}
 
             {isOffline && (
                 <View style={styles.offlineBanner}>
@@ -161,6 +196,35 @@ const styles = StyleSheet.create({
         backgroundColor: colors.panel,
         borderBottomWidth: 1,
         borderColor: colors.border,
+    },
+    avisoBanner: {
+        backgroundColor: 'rgba(217, 179, 0, 0.12)',
+        borderLeftWidth: 4,
+        borderLeftColor: colors.gold,
+        borderRadius: radius.control,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginHorizontal: 20,
+        marginBottom: 12,
+    },
+    avisoCritico: {
+        backgroundColor: 'rgba(248, 113, 113, 0.15)',
+        borderLeftColor: colors.danger,
+    },
+    avisoInfo: {
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        borderLeftColor: colors.textMuted,
+    },
+    avisoTitulo: {
+        color: colors.text,
+        fontWeight: '700',
+        fontSize: 14,
+        marginBottom: 4,
+    },
+    avisoMensaje: {
+        color: colors.textMuted,
+        fontSize: 12.5,
+        lineHeight: 18,
     },
     galponBanner: {
         flexDirection: 'row',
