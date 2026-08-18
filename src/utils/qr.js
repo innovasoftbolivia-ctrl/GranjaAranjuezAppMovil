@@ -2,6 +2,7 @@
 // nativas) para poder testearla fácilmente. Acepta:
 //   - JSON: {"app":"granja-aa","id_galpon":3,"nombre":"Galpón 3"}
 //   - URI:  granja-aa://galpon/3
+//   - URL:  https://elservidor/galpon/3   (la que imprime el panel web)
 // Devuelve { id_galpon, nombre } o null si el QR no es de la app.
 export function parseGalponQR(raw) {
     if (!raw) return null;
@@ -26,6 +27,21 @@ export function parseGalponQR(raw) {
     const m = text.match(/^granja-aa:\/\/galpon\/(\d+)$/i);
     if (m) {
         return { id_galpon: Number(m[1]), nombre: `Galpón ${m[1]}` };
+    }
+
+    // La etiqueta que imprime el panel web lleva la URL de la ficha del galpón.
+    // Así un solo código pegado en la puerta sirve para los dos caminos: con la
+    // cámara del celular abre la ficha en el navegador, y con esta app entra
+    // directo al galpón.
+    //
+    // No se valida el host a propósito. El QR es un identificador, no un destino
+    // de navegación —la app siempre pega contra su propia API—, y atarlo al
+    // dominio dejaría muertas las etiquetas ya impresas en cuanto cambie el
+    // túnel de ngrok. Sí se exige que /galpon/<id> cierre la ruta, para no
+    // confundirla con /galpon/<id>/qr, que es la pantalla de impresión.
+    const url = text.match(/^https?:\/\/\S+?\/galpon\/(\d+)\/?(?:[?#]\S*)?$/i);
+    if (url) {
+        return { id_galpon: Number(url[1]), nombre: `Galpón ${url[1]}` };
     }
 
     return null;
